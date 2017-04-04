@@ -33,6 +33,8 @@ use DBIx::Thorm::Record;
 sub new {
     my ($class, %opt) = @_;
     $opt{class_prefix} ||= 'DBIx::Thorm::Record';
+    $opt{key}
+        or croak "$class->new: required parameter missing: 'key'";
     return bless \%opt, $class;
 };
 
