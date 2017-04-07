@@ -42,5 +42,21 @@ is( $foo1->id , $foo2->id , "Data round trip (id)" );
 is( $foo1->foo, $foo2->foo, "Data round trip (foo)" );
 is( $foo1->bar, $foo2->bar, "Data round trip (bar)" );
 
+note "TEST LOOKUP + ACCUM";
+
+$set->save( { foo => 1, bar => 137 } );
+$set->save( { foo => 2, bar => 137 } );
+
+my $list = $set->lookup( criteria => { bar => 137 } );
+note "Fetch list: ", explain $list;
+
+is (scalar @$list, 2, "2 items selected");
+
+my %uniq;
+foreach my $item (@$list) {
+    isa_ok $item, $set->get_class;
+    is ($item->bar, 137, "bar as expected");
+    ok (!$uniq{ $item->foo }++, "foo different");
+};
 
 done_testing;

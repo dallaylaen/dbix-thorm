@@ -20,7 +20,9 @@ DBIx::Thorm::Source::SQLite - SQL-based storage for Thorm.
 =cut
 
 use Carp;
-use  parent qw(DBIx::Thorm::Source);
+
+use parent qw(DBIx::Thorm::Source);
+use DBIx::Thorm::Accumulator;
 
 sub new {
     my ($class, %opt) = @_;
@@ -51,7 +53,7 @@ sub save {
     my $id = $item->{$key};
 
     if ($id) {
-        my $sth = $self->prepare(
+        my $sth = $self->_prepare(
             UPDATE => $self->{table},
             SET    => $self->{quest_update},
             WHERE  => $self->{key}, '= ?'
@@ -65,7 +67,7 @@ sub save {
     };
 
     # ELSE - create a new record from scratch
-    my $sth = $self->prepare(
+    my $sth = $self->_prepare(
         INSERT => INTO => $self->{table},
         $self->{names_insert},
         VALUES => $self->{quest_insert},
@@ -79,16 +81,10 @@ sub save {
         $self->get_class->new( %$item, $key => $id );
 };
 
-sub prepare {
-    my ($self, @sql) = @_;
-
-    return $self->{dbh}->prepare_cached(join " ", @sql);
-};
-
 sub load {
     my ($self, $id) = @_;
 
-    my $sth = $self->prepare(
+    my $sth = $self->_prepare(
         SELECT => $self->{names_select},
         FROM   => $self->{table},
         WHERE  => "$self->{key} = ?");
@@ -101,6 +97,34 @@ sub load {
 
     $sth->finish;
     return $self->get_class->new( %$raw );
+};
+
+sub lookup {
+    my ($self, %opt) = @_;
+
+    my $accum = DBIx::Thorm::Accumulator->new;
+    # TODO sort, limit
+
+    # TODO check that keys are within allowed
+
+    my $sth = $self->_prepare(
+        SELECT => $self->{names_select},
+        FROM   => $self->{table},
+        WHERE  => $accum->where($opt{criteria}),
+    );
+
+    $sth->execute( $accum->list );
+    my @ret;
+    while (my $row = $sth->fetchrow_hashref) {
+        push @ret, $self->get_class->new( %$row );
+    };
+    return \@ret;
+};
+
+sub _prepare {
+    my ($self, @sql) = @_;
+
+    return $self->{dbh}->prepare_cached(join " ", @sql);
 };
 
 1;
