@@ -2,7 +2,7 @@ package DBIx::Thorm::Source::SQLite;
 
 use strict;
 use warnings;
-our $VERSION = 0.0101;
+our $VERSION = 0.0102;
 
 =head1 NAME
 
@@ -24,8 +24,20 @@ use Carp;
 use parent qw(DBIx::Thorm::Source);
 use DBIx::Thorm::Accumulator;
 
+my $testbase;
 sub new {
     my ($class, %opt) = @_;
+
+    if ($opt{test}) {
+        require DBI;
+        require DBD::SQLite;
+        $opt{dbh} = $testbase ||= DBI->connect(
+            'dbi:SQLite:dbname=:memory:', '', '', { RaiseError => 1} );
+
+        if ($opt{test} =~ /[A-Za-z]/) {
+            /\S/ and $opt{dbh}->do($_) for split /;/, $opt{test};
+        };
+    };
 
     my @missing = grep { !$opt{$_} } qw(dbh table key);
     croak "$class->new: missing parameters @missing"
