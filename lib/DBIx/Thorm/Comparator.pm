@@ -3,57 +3,62 @@ use warnings;
 
 package DBIx::Thorm::Comparator;
 
-our $VERSION = 0.0101;
+our $VERSION = 0.0102;
 
 use Carp;
 use Exporter qw(import);
-our @EXPORT = qw(smth);
+our @EXPORT = qw(string number);
+our @EXPORT_OK = qw(whitelist blacklist);
 
-use overload 
-    '""' => "as_string",
-    eq   => sub { $_[0]->as_string eq $_[1] },
-    bool => sub { !$_[0]->is_empty },
-    '&'  => sub { $_[0]->bit_and( $_[1] ) },
-    '&&'  => sub { $_[0]->bit_and( $_[1] ) },
-    '==' => sub { 
-        DBIx::Thorm::Comparator::Whitelist->new($_[1])->bit_and($_[0]) },
-    map { $_ => "xxx$_" } qw(< <= > >= lt le gt ge);
-
-foreach (qw(< <= > >= lt le gt ge)) {
-    my $sign = $_;
-    my $method = "xxx$_";
-
-    my $code = sub {
-            my $self = shift;
-            return $self->bit_and( 
-                DBIx::Thorm::Comparator::Sign->new($sign, @_) );
-    };
-    no strict 'refs';
-    *$method = $code;
+# prototyped sugar
+sub string () {
+    return __PACKAGE__->new;
 };
-# OOPS no new() here
 
-sub smth () { ## no critic
-    return bless {}, 'DBIx::Thorm::Comparator::True';
-        # return class that matches everything
+sub number () {
+    return DBIx::Thorm::Comparator::Number->new;
+};
+
+sub blacklist {
+    return DBIx::Thorm::Comparator->new(@_);
+};
+
+sub whitelist {
+    return DBIx::Thorm::Comparator::Whitelist->new(@_);
+};
+
+use overload
+    '""' => "as_string",
+    bool => "is_nonempty",
+    'eq' => sub { $_[0]->as_string eq $_[1] }, # this is for Test::More's is() to work
+    '&'  => 'bit_and',
+    '|'  => 'bit_or',
+    '==' => sub { whitelist($_[1])->bit_and($_[0]) },
+    '!=' => sub { blacklist($_[1])->bit_and($_[0]) },
+    '<'  => 'and_lt',
+    '<=' => 'and_le',
+    '>'  => 'and_gt',
+    '>=' => 'and_ge',
+    ;
+
+# some basic funs
+
+sub bit_and {
+    return DBIx::Thorm::Comparator::And->new( $_[0], $_[1] );
+};
+
+sub bit_or {
+    return DBIx::Thorm::Comparator::Or->new( $_[0], $_[1] );
 };
 
 sub between {
     my ($self, $from, $to) = @_;
-
-    return $self->bit_and( DBIx::Thorm::Comparator::Sign->new( ge => $from ) )
-                ->bit_and( DBIx::Thorm::Comparator::Sign->new( le => $to ) );
+    return $self->and_ge( $from )->and_le( $to );
 };
 
 sub in {
     my $self = shift;
-    return DBIx::Thorm::Comparator::Whitelist->new(@_)->bit_and($self);
-};
-
-sub as_string {
-    my $self = shift;
-    my ($expr, $data) = $self->sql('smth');
-    return @$data ? "$expr [@$data]" : $expr;
+   return DBIx::Thorm::Comparator::Whitelist->new(@_)->bit_and($self);
 };
 
 sub filter {
@@ -61,36 +66,123 @@ sub filter {
     return grep { $self->match($_) } @_;
 };
 
-sub bit_and {
-    my ($self, $other) = @_;
-    return DBIx::Thorm::Comparator::And->new( $self, $other );
+sub as_string {
+    my $self = shift;
+    my ($expr, $data) = $self->sql('string');
+    return @$data ? "$expr [@$data]" : $expr;
 };
 
-package DBIx::Thorm::Comparator::True;
 
-our @ISA = qw(DBIx::Thorm::Comparator);
-
+# implement blacklist as default
 sub new {
-    return bless {}; # no subclass here
-};
-
-sub bit_and {
-    my ($self, $other) = @_;
-    return $other;
+    my $class = shift;
+    my %black;
+    $black{$_}++ for grep defined, @_;
+    return bless { black => \%black }, $class;
 };
 
 sub match {
-    return 1;
+    my ($self, $x) = @_;
+    return !$self->{black}{$x};
 };
 
 sub sql {
-    return ('1=1', []);
+    my ($self, $name) = @_;
+    my @arg = keys %{ $self->{black} };
+    my @sql = ("$name <> ?") x @arg;
+    my $sql = @sql ? join ' AND ', @sql : '1=1';
+    return ($sql, \@arg );
 };
 
-sub is_empty {
-    return '';
+sub is_nonempty {
+    return 1;
 };
 
+sub is_true {
+    my $self = shift;
+    return !keys %{ $self->{black} };
+};
+
+# subclass generator
+
+my %inv = (
+    lt => 'gt',
+    le => 'ge',
+);
+%inv = (%inv, reverse %inv);
+
+sub _false { return '' };
+sub _subclass_op {
+    my ($basic, $op, $sign, $code) = @_;
+
+    my $new = sub {
+        my ($class, $arg) = @_;
+        return $basic->new unless defined $arg;
+        croak "Bad argument $arg for class $class"
+            unless $basic->new->match($arg);
+        return bless { arg => $arg }, $class;
+    };
+    my $sql = sub {
+        my ($self, $name) = @_;
+        return ("$name $sign ?", [$self->{arg}]);
+    };
+    my $pkg = "${basic}::$op";
+    my $add_op = sub {
+        my ($self, $arg) = @_;
+        return $self->bit_and( $pkg->new($arg) );
+    };
+    if ($inv{$op}) {
+        my $inv_pkg = "${basic}::$inv{$op}";
+        $add_op = sub {
+            my ($self, $arg, $inverse) = @_;
+            return $self->bit_and( ($inverse ? $inv_pkg : $pkg)->new($arg) );
+        };
+    };
+
+    no strict 'refs';
+    @{"${pkg}::ISA"} = $basic;
+    *{"${pkg}::new"} = $new;
+    *{"${pkg}::match"} = $code;
+    *{"${pkg}::sql"} = $sql;
+    *{"${pkg}::is_true"} = \&_false;
+    *{"${basic}::and_$op"} = $add_op;
+
+    return $basic;
+};
+
+__PACKAGE__->_subclass_op( lt => '<'  => sub { $_[1] lt $_[0]->{arg} } );
+__PACKAGE__->_subclass_op( le => '<=' => sub { $_[1] le $_[0]->{arg} } );
+__PACKAGE__->_subclass_op( ge => '>=' => sub { $_[1] ge $_[0]->{arg} } );
+__PACKAGE__->_subclass_op( gt => '>'  => sub { $_[1] gt $_[0]->{arg} } );
+
+package DBIx::Thorm::Comparator::Number;
+
+use Scalar::Util qw(looks_like_number);
+our @ISA = qw(DBIx::Thorm::Comparator);
+
+sub match {
+    my ($self, $arg) = @_;
+    return looks_like_number($arg) && !$self->{black}{$arg};
+};
+
+sub new {
+    my $self = shift;
+    return $self->SUPER::new( grep { defined $_ and looks_like_number $_ } @_ );
+};
+
+sub as_string {
+    my $self = shift;
+
+    warn "Overloaded \"\" in action";
+
+    my ($expr, $data) = $self->sql('number');
+    return @$data ? "$expr [@$data]" : $expr;
+};
+
+__PACKAGE__->_subclass_op( lt => '<'  => sub { looks_like_number $_[1] and $_[1] <  $_[0]->{arg} } );
+__PACKAGE__->_subclass_op( le => '<=' => sub { looks_like_number $_[1] and $_[1] <= $_[0]->{arg} } );
+__PACKAGE__->_subclass_op( ge => '>=' => sub { looks_like_number $_[1] and $_[1] >= $_[0]->{arg} } );
+__PACKAGE__->_subclass_op( gt => '>'  => sub { looks_like_number $_[1] and $_[1] >  $_[0]->{arg} } );
 
 package DBIx::Thorm::Comparator::Whitelist;
 
@@ -100,86 +192,41 @@ sub new {
     my $class = shift;
     my %white;
     $white{$_}++ for @_;
-    return bless \%white;
+    return bless { white => \%white}, $class;
 };
 
 sub bit_and {
-    my ($self, $other) = @_;
-    return DBIx::Thorm::Comparator::Whitelist->new( 
-        $other->filter( keys %$self ));
+    my ($self, @other) = @_;
+
+    my @white = keys %{ $self->{white} };
+    @white = $_->filter(@white) for @other;
+
+    return DBIx::Thorm::Comparator::Whitelist->new( @white );
 };
 
 sub match {
     my ($self, $x) = @_;
-    return $self->{$x} || '';
+    return $self->{white}{$x} || '';
 };
 
 sub sql {
     my ($self, $name) = @_;
 
-    my $n = scalar keys %$self;
+    my $n = scalar keys %{ $self->{white} };
     return '1=0' unless $n;
 
     my $str = join ' OR ', ("$name = ?") x $n;
     $str = "($str)" if $n > 1;
 
-    return ($str, [keys %$self]);
+    return ($str, [keys %{ $self->{white} }]);
 };
 
-sub is_empty {
+sub is_nonempty {
     my $self = shift;
-    return !%$self;
+    return !! %{ $self->{white} };
 };
 
-package DBIx::Thorm::Comparator::Sign;
-
-use Carp;
-our @ISA = qw(DBIx::Thorm::Comparator);
-
-my %comp_inv = (
-    '<=' => '>=',
-    '<'  => '>',
-    'le' => 'ge',
-    'lt' => 'gt',
-);
-%comp_inv = (%comp_inv, reverse %comp_inv);
-
-sub new {
-    my ($class, $sign, $arg, $inverse) = @_;
-
-    croak "Unsupported operation $sign"
-        unless $comp_inv{$sign};
-    $sign = $comp_inv{$sign} if $inverse;
-
-    return bless {
-        sign => $sign,
-        arg  => $arg,
-        code => eval "sub { return \$_[0] $sign \$arg }",
-    };
-};
-
-sub match {
-    my ($self, $x) = @_;
-    return $self->{code}->($x);
-};
-
-my %unperl = (
-    ge   => '>=',
-    gt   => '>',
-    le   => '<=',
-    lt   => '<',
-    '>=' => '>=',
-    '>'  => '>',
-    '<=' => '<=',
-    '<'  => '<',
-);
-
-sub sql {
-    my ($self, $name) = @_;
-    return ( "$name $unperl{$self->{sign}} ?", [$self->{arg}] );
-};
-
-sub is_empty {
+sub is_true {
     return '';
 };
 
@@ -189,35 +236,107 @@ our @ISA = qw(DBIx::Thorm::Comparator);
 
 sub new {
     my $class = shift;
+    my @args;
 
-    my @comp = @_;
-    # TODO compact list if possible
+    # first, filter out args & short circuit, if possible
+    foreach (@_) {
+        $_->is_nonempty or return $_;
+        $_->is_true and next;
+        ref $_ eq 'DBIx::Thorm::Comparator::Whitelist'
+            and return $_->bit_and(@_);
+        push @args, $_;
+    };
 
-    return DBIx::Thorm::Comparator->new unless @comp;
-    return bless { part => \@comp };
+    # if 0-1 args, && op is trivial
+    return DBIx::Thorm::Comparator->new unless @args;
+    return $args[0] if @args == 1;
+
+    # ok, the hard part
+    return bless { part => \@args }, $class;
 };
 
 sub match {
     my ($self, $x) = @_;
 
-    foreach my $check( @{ $self->{part} } ) {
-        return '' unless $check->match($x);
-    };
-
+    $_->match($x) or return '' for @{ $self->{part} };
     return 1;
 };
 
 sub sql {
     my ($self, $name) = @_;
 
-    my (@sql, @param);
-    foreach my $part (@{ $self->{part} }) {
-        my ($sql, $data) = $part->sql($name);
+    my @sql;
+    my @data;
+
+    foreach (@{ $self->{part} }) {
+        my ($sql, $arg) = $_->sql($name);
         push @sql, $sql;
-        push @param, @$data;
+        push @data, @$arg;
     };
-    my $str = join ' AND ', @sql;
-    return ($str, \@param);
+
+    push @sql, '1=1' unless @sql;
+    return ((join ' AND ', @sql), \@data);
+};
+
+sub is_true {
+    return '';
+};
+
+package DBIx::Thorm::Comparator::Or;
+
+our @ISA = qw(DBIx::Thorm::Comparator);
+
+sub new {
+    my $class = shift;
+    my @args;
+
+    warn "OR-ing: @_";
+    # first, filter out args & short circuit, if possible
+    foreach (@_) {
+        $_->is_true and return $_;
+        $_->is_nonempty or next;
+        push @args, $_;
+    };
+
+
+    warn "OR-ing: left @args";
+    # if 0-1 args, && op is trivial
+    return DBIx::Thorm::Comparator::Whitelist->new unless @args;
+    return $args[0] if @args == 1;
+
+    # ok, the hard part
+    return bless { part => \@args }, $class;
+};
+
+sub match {
+    my ($self, $x) = @_;
+
+    $_->match($x) and return 1 for @{ $self->{part} };
+    return '';
+};
+
+sub sql {
+    my ($self, $name) = @_;
+
+    my @sql;
+    my @data;
+
+    foreach (@{ $self->{part} }) {
+        my ($sql, $arg) = $_->sql($name);
+        $sql =~ /^\((.*)\)$/ and $sql = $1;
+        push @sql, $sql;
+        push @data, @$arg;
+    };
+
+    push @sql, '1=0' unless @sql;
+    my $str = join ' OR ', @sql;
+    $str = "($str)" if @sql > 1;
+
+    return ($str, \@data);
+};
+
+sub is_true {
+    return '';
 };
 
 1;
