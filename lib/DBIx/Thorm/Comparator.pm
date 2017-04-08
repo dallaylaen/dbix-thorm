@@ -173,8 +173,6 @@ sub new {
 sub as_string {
     my $self = shift;
 
-    warn "Overloaded \"\" in action";
-
     my ($expr, $data) = $self->sql('number');
     return @$data ? "$expr [@$data]" : $expr;
 };
@@ -290,7 +288,6 @@ sub new {
     my $class = shift;
     my @args;
 
-    warn "OR-ing: @_";
     # first, filter out args & short circuit, if possible
     foreach (@_) {
         $_->is_true and return $_;
@@ -298,8 +295,6 @@ sub new {
         push @args, $_;
     };
 
-
-    warn "OR-ing: left @args";
     # if 0-1 args, && op is trivial
     return DBIx::Thorm::Comparator::Whitelist->new unless @args;
     return $args[0] if @args == 1;
