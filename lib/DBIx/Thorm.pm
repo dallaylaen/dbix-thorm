@@ -3,7 +3,7 @@ package DBIx::Thorm;
 use 5.006;
 use strict;
 use warnings;
-our $VERSION = 0.01;
+our $VERSION = 0.0101;
 
 =head1 NAME
 
@@ -11,18 +11,83 @@ DBIx::Thorm - ORM that doesn't get in the way.
 
 =head1 SYNOPSIS
 
-Quick summary of what the module does.
-
-Perhaps a little code snippet.
-
     use DBIx::Thorm;
 
-    my $foo = DBIx::Thorm->new();
-    ...
+    thorm connect dbi => 'dbi:SQLite:dbname=...';
+    my $ds = thorm table => 'foobar',
+        key => 'id',
+        fields => [qw[foo bar baz]];
 
-=head1 SUBROUTINES/METHODS
+    $ds->save({ foo => 42, bar => 137});
+    $ds->save({ foo => 42 });
+    my $data = $ds->lookup( order => '-foo', criteria => { bar => number > 100 } );
+    forach (@$data) {
+        ...
+    };
 
-None so far.
+=head1 EXPORT
+
+=cut
+
+use Carp;
+use Exporter qw(import);
+
+use DBIx::Thorm::Comparator;
+our @EXPORT = qw(thorm string number);
+
+=head2 thorm operation => options ...
+
+Shorthand frontend to DBIx::Thorm->operation( ... );
+
+=cut
+
+our $Inst = bless {};
+sub thorm (@) {
+    return $Inst unless @_;
+    my $todo = shift;
+    return $Inst->$todo(@_);
+};
+
+=head2 connect
+
+=cut
+
+sub connect {
+    my ($self, %opt) = @_;
+
+    $opt{name} ||= 'default'; # default conn
+    $opt{dbi} or croak "thorm->connect: dbi is required";
+
+    $self->{dbh}{ $opt{name} }
+        and croak "thorm->connect: trying to set connection '$opt{name}' again";
+
+    require DBI;
+    my %extra = ( RaiseError => 1 );
+    $extra{sqlite_unicode}++ if $opt{dbi} =~ /^dbi:SQLite/;
+
+    $self->{dbh}{ $opt{name} } = DBI->connect(
+        $opt{dbi}, $opt{user}, $opt{pass}, \%extra
+    );
+
+    return $self;
+};
+
+sub table {
+    my ($self, $name, %opt) = @_;
+
+    $opt{dbh} = $self->{dbh}{ $opt{dbh} || 'default' };
+
+    # TODO lazy dbh
+    # TODO save table inside
+    require DBIx::Thorm::Source::SQLite;
+    return DBIx::Thorm::Source::SQLite->new( %opt, table => $name );
+};
+
+sub dbh {
+    my ($self, $name) = @_;
+    $name ||= 'default';
+    return $self->{dbh}{$name};
+};
 
 =head1 AUTHOR
 

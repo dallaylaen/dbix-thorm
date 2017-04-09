@@ -2,7 +2,7 @@ package DBIx::Thorm::Source::SQLite;
 
 use strict;
 use warnings;
-our $VERSION = 0.0103;
+our $VERSION = 0.0104;
 
 =head1 NAME
 
@@ -65,13 +65,16 @@ sub save {
     my $id = $item->{$key};
 
     if ($id) {
+        # TODO only update needed fields - see Accumulator
         my $sth = $self->_prepare(
             UPDATE => $self->{table},
             SET    => $self->{quest_update},
             WHERE  => $self->{key}, '= ?'
         );
-        $sth->execute($id);
-        if (!$sth->rows) {  
+        my @arg = map { $item->{$_} } @{ $self->{fields} };
+        push @arg, $id;
+        $sth->execute(@arg);
+         if ($sth->rows < 1) {
             # TODO decide later - maybe create still
             croak("save(): No such row, cannot update");
         };
