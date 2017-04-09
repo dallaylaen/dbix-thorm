@@ -30,7 +30,14 @@ my $data = $set->lookup( criteria => { debt => number > 100 } );
 note explain $data;
 is ($data->[0]->name, 'Doug', "round trip");
 
-$data = $set->lookup( criteria => { age => number > 20, name => string < "D" } ); 
+$data = $set->lookup(
+    criteria => { age => number > 20, name => string < "D" },
+    order => 'debt',
+    limit => 1,
+); 
 note explain $data;
+
+is scalar @$data, 1, "limit applied";
+is $data->[0]->name, "Charlie", "Order applied";
 
 done_testing;

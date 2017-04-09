@@ -2,7 +2,7 @@ package DBIx::Thorm::Source::SQLite;
 
 use strict;
 use warnings;
-our $VERSION = 0.0102;
+our $VERSION = 0.0103;
 
 =head1 NAME
 
@@ -115,7 +115,15 @@ sub lookup {
     my ($self, %opt) = @_;
 
     my $accum = DBIx::Thorm::Accumulator->new;
-    # TODO sort, limit
+    my @order;
+    foreach( ref $opt{order} ? @{$opt{order}} : $opt{order} ) {
+        defined $_ or next;
+        push @order, /^-(.*)/ ? "$1 DESC" : "$_";
+    };
+    my $order = @order ? "ORDER BY ".join ", ", @order : '';
+    if ($opt{limit}) {
+        $order .= " LIMIT ".(ref $opt{limit} ? join ",", @{$opt{limit}} : $opt{limit});
+    };
 
     # TODO check that keys are within allowed
 
@@ -123,6 +131,7 @@ sub lookup {
         SELECT => $self->{names_select},
         FROM   => $self->{table},
         WHERE  => $accum->where($opt{criteria}),
+        $order,
     );
 
     $sth->execute( $accum->list );
