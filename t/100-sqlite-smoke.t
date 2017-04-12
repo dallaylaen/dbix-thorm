@@ -59,4 +59,13 @@ foreach my $item (@$list) {
     ok (!$uniq{ $item->foo }++, "foo different");
 };
 
+eval {
+    $set->save( { foo => 100, id => 100 } );
+};
+like $@, qr/update/, "Unknown id = no go";
+note $@;
+
+my $item = $set->save( { id => 1, bar => 42 } );
+is (ref $item, $set->get_class, "save(plain + id) returned blessed {}");
+
 done_testing;

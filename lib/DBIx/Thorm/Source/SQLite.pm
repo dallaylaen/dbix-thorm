@@ -2,7 +2,7 @@ package DBIx::Thorm::Source::SQLite;
 
 use strict;
 use warnings;
-our $VERSION = 0.0104;
+our $VERSION = 0.0105;
 
 =head1 NAME
 
@@ -20,6 +20,7 @@ DBIx::Thorm::Source::SQLite - SQL-based storage for Thorm.
 =cut
 
 use Carp;
+use Scalar::Util qw(blessed);
 
 use parent qw(DBIx::Thorm::Source);
 use DBIx::Thorm::Accumulator;
@@ -74,11 +75,11 @@ sub save {
         my @arg = map { $item->{$_} } @{ $self->{fields} };
         push @arg, $id;
         $sth->execute(@arg);
-         if ($sth->rows < 1) {
+        if ($sth->rows < 1) {
             # TODO decide later - maybe create still
             croak("save(): No such row, cannot update");
         };
-        return $item;
+        return blessed $item ? $item : $self->get_class->new(%$item);
     };
 
     # ELSE - create a new record from scratch
@@ -88,12 +89,14 @@ sub save {
         VALUES => $self->{quest_insert},
     );
     $sth->execute( map { $item->{$_} } @{ $self->{fields} } );
-    $id = $self->{dbh}->last_insert_id('', '', $self->{table}, $self->{key});
-
     # TODO check & die here
-    # TODO check already blessed
-    return defined wantarray &&
-        $self->get_class->new( %$item, $key => $id );
+
+    if (defined wantarray) {
+        $id = $self->{dbh}->last_insert_id('', '', $self->{table}, $self->{key});
+
+        # TODO check already blessed
+        return $self->get_class->new( %$item, $key => $id );
+    };
 };
 
 sub load {
