@@ -14,10 +14,11 @@ WHERE %s AND t.id > ?
 LIMIT 101
 SQL
 
-my $sql_dec = sprintf $sql, "t.??? AND t.???";
+my $sql_dec = sprintf $sql, "t = ??? AND t = ???";
 my $sql_hand = sprintf $sql, "t.foo = ? AND t.bar IS NULL";
 
-note $sql_dec;
+note "Template: \n$sql_dec";
+note "Must become: \n$sql_hand";
 
 is_deeply
     [ decorate_query( $sql_dec, 42, { foo => 137 }, { bar => undef }, 1337 ) ],

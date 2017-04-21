@@ -14,8 +14,8 @@ sub decorate_query {
     my @real_param;
     my $n;
     my $saved_n = scalar @param;
-    while ( $query =~ s/(.*?)(?:([A-Za-z_]\w*)\.\?\?\?|(\?))//s ) {
-        my ($plain, $prefix, $quest) = ($1, $2, $3);
+    while ( $query =~ s/(.*?)(?:([A-Za-z_]\w*)\s*([=:])\s*\?\?\?|(\?))//s ) {
+        my ($plain, $prefix, $oper, $quest) = ($1, $2, $3, $4);
 
         $n++;
 
@@ -28,7 +28,7 @@ sub decorate_query {
             push @join, $quest;
             push @real_param, $sub;
         }
-        elsif ($prefix) {
+        elsif ($oper eq '=') {
             my $sub = shift @param;
             croak "decorate_query: param $n: expected hash, found scalar"
                 if !ref $sub;
@@ -36,6 +36,9 @@ sub decorate_query {
             my ($sql, @list) = where_hash( $sub, $prefix );
             push @join, $sql;
             push @real_param, @list;
+        }
+        elsif ($oper eq ':') {
+            croak "Unimplemented yet";
         }
         else {
             die "Cannot be here";
