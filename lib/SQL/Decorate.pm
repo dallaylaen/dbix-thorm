@@ -7,6 +7,9 @@ use Carp;
 use Exporter qw(import);
 our @EXPORT = qw(decorate_query where_hash);
 
+# ident + '='|':' + ??? + maybe [foo bar]
+my $re_subst = qr/([A-Za-z_]\w*)\s*([=:])\s*\?\?\?(?:\[(.*?)\])?/;
+
 sub decorate_query {
     my ($query, @param) = @_;
 
@@ -14,11 +17,11 @@ sub decorate_query {
     my @real_param;
     my $n;
     my $saved_n = scalar @param;
-    while ( $query =~ s/(.*?)(?:([A-Za-z_]\w*)\s*([=:])\s*\?\?\?|(\?))//s ) {
-        my ($plain, $prefix, $oper, $quest) = ($1, $2, $3, $4);
+    while ( $query =~ s/^(.*?)(?:$re_subst|(\?))//s ) {
+        my ($plain, $prefix, $oper, $slice, $quest) = ($1, $2, $3, $4, $5);
 
         $n++;
-
+        $slice &&= [ split /\s+/, $slice ];
         push @join, $plain;
 
         if ($quest) {
@@ -33,17 +36,18 @@ sub decorate_query {
             croak "decorate_query: param $n: expected hash, found scalar"
                 if !ref $sub;
 
-            my ($sql, @list) = where_hash( $sub, $prefix );
+            
+            my ($sql, @list) = where_hash( $sub, $prefix, $slice );
             push @join, $sql;
             push @real_param, @list;
         }
         elsif ($oper eq ':') {
-            croak "Unimplemented yet";
+            croak "Unknown operation: '$prefix$oper???'";
         }
         else {
             die "Cannot be here";
         };
-    };
+    }; # end while ( =~ )
 
     croak "decorate_query: expected $n positional parameters, got $saved_n"
         if $saved_n != $n;
@@ -53,12 +57,15 @@ sub decorate_query {
 };
 
 sub where_hash {
-    my ($hash, $prefix) = @_;
+    my ($hash, $prefix, $fields) = @_;
     $prefix = (defined $prefix and length $prefix) ? "$prefix." : '';
 
+    my @fields = $fields
+        ? grep { exists $hash->{$_} } @$fields
+        : sort keys %$hash; # always sort to increase cache hits
     my @sql;
     my @param;
-    foreach (keys %$hash) {
+    foreach (@fields) {
         if (defined $hash->{$_}) {
             push @sql, "$prefix$_ = ?";
             push @param, $hash->{$_};

@@ -14,16 +14,25 @@ WHERE %s AND t.id > ?
 LIMIT 101
 SQL
 
-my $sql_dec = sprintf $sql, "t = ??? AND t = ???";
-my $sql_hand = sprintf $sql, "t.foo = ? AND t.bar IS NULL";
+my $sql_dec = sprintf $sql, "t = ???";
+my $sql_hand = sprintf $sql, "t.bar IS NULL AND t.foo = ?";
 
-note "Template: \n$sql_dec";
-note "Must become: \n$sql_hand";
+note " --- Template: \n$sql_dec";
+note " --- Must become: \n$sql_hand";
+note " ---";
 
 is_deeply
-    [ decorate_query( $sql_dec, 42, { foo => 137 }, { bar => undef }, 1337 ) ],
+    [ decorate_query( $sql_dec, 42, { foo => 137, bar => undef }, 1337 ) ],
     [ $sql_hand, 42, 137, 1337 ],
     "Decorate worked";
+
+note "TESTING SLICE";
+$sql_dec = sprintf $sql, "t = ???[bar baz foo]";
+
+is_deeply
+    [ decorate_query( $sql_dec, 42, { foo => 137, bar => undef, guest => -1 }, 1337 ) ],
+    [ $sql_hand, 42, 137, 1337 ],
+    "Decorate with slice worked";
 
 
 
