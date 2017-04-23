@@ -4,14 +4,18 @@ use strict;
 use warnings;
 
 use Carp;
-use Exporter qw(import);
-our @EXPORT = qw(decorate_query where_hash);
+
+sub new {
+    my ($class, %opt) = @_;
+
+    return bless \%opt, $class;
+};
 
 # ident + '='|':' + ??? + maybe [foo bar]
 my $re_subst = qr/([A-Za-z_]\w*)\s*([=:])\s*\?\?\?(?:\[(.*?)\])?/;
 
-sub decorate_query {
-    my ($query, @param) = @_;
+sub decorate {
+    my ($self, $query, @param) = @_;
 
     my @join;
     my @real_param;
@@ -37,7 +41,7 @@ sub decorate_query {
                 if !ref $sub;
 
             
-            my ($sql, @list) = where_hash( $sub, $prefix, $slice );
+            my ($sql, @list) = $self->where( $sub, $prefix, $slice );
             push @join, $sql;
             push @real_param, @list;
         }
@@ -56,8 +60,8 @@ sub decorate_query {
     return ($sql, @real_param);
 };
 
-sub where_hash {
-    my ($hash, $prefix, $fields) = @_;
+sub where {
+    my ($self, $hash, $prefix, $fields) = @_;
     $prefix = (defined $prefix and length $prefix) ? "$prefix." : '';
 
     my @fields = $fields

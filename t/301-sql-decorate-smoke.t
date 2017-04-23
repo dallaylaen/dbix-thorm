@@ -6,6 +6,8 @@ use Test::More;
 
 use SQL::Decorate;
 
+my $dec = SQL::Decorate->new;
+
 my $sql = <<'SQL';
 SELECT * 
 FROM table t JOIN table q 
@@ -22,7 +24,7 @@ note " --- Must become: \n$sql_hand";
 note " ---";
 
 is_deeply
-    [ decorate_query( $sql_dec, 42, { foo => 137, bar => undef }, 1337 ) ],
+    [ $dec->decorate( $sql_dec, 42, { foo => 137, bar => undef }, 1337 ) ],
     [ $sql_hand, 42, 137, 1337 ],
     "Decorate worked";
 
@@ -30,11 +32,8 @@ note "TESTING SLICE";
 $sql_dec = sprintf $sql, "t = ???[bar baz foo]";
 
 is_deeply
-    [ decorate_query( $sql_dec, 42, { foo => 137, bar => undef, guest => -1 }, 1337 ) ],
+    [ $dec->decorate( $sql_dec, 42, { foo => 137, bar => undef, guest => -1 }, 1337 ) ],
     [ $sql_hand, 42, 137, 1337 ],
     "Decorate with slice worked";
-
-
-
 
 done_testing;
