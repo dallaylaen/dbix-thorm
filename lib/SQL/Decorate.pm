@@ -71,7 +71,7 @@ sub where {
     my @param;
     foreach (@fields) {
         if (ref $hash->{$_}) {
-            my ($sql, $arg) = $hash->{$_}->sql($_);
+            my ($sql, $arg) = $hash->{$_}->sql("$prefix$_");
             push @sql, $sql;
             push @param, @$arg;
         }
