@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 
-package DBIx::Thorm::Comparator;
+package Data::Criteria;
 
 our $VERSION = 0.0102;
 
@@ -16,15 +16,15 @@ sub string () {
 };
 
 sub number () {
-    return DBIx::Thorm::Comparator::Number->new;
+    return Data::Criteria::Number->new;
 };
 
 sub blacklist {
-    return DBIx::Thorm::Comparator->new(@_);
+    return Data::Criteria->new(@_);
 };
 
 sub whitelist {
-    return DBIx::Thorm::Comparator::Whitelist->new(@_);
+    return Data::Criteria::Whitelist->new(@_);
 };
 
 use overload
@@ -44,11 +44,11 @@ use overload
 # some basic funs
 
 sub bit_and {
-    return DBIx::Thorm::Comparator::And->new( $_[0], $_[1] );
+    return Data::Criteria::And->new( $_[0], $_[1] );
 };
 
 sub bit_or {
-    return DBIx::Thorm::Comparator::Or->new( $_[0], $_[1] );
+    return Data::Criteria::Or->new( $_[0], $_[1] );
 };
 
 sub between {
@@ -58,7 +58,7 @@ sub between {
 
 sub in {
     my $self = shift;
-   return DBIx::Thorm::Comparator::Whitelist->new(@_)->bit_and($self);
+   return Data::Criteria::Whitelist->new(@_)->bit_and($self);
 };
 
 sub filter {
@@ -155,10 +155,10 @@ __PACKAGE__->_subclass_op( le => '<=' => sub { $_[1] le $_[0]->{arg} } );
 __PACKAGE__->_subclass_op( ge => '>=' => sub { $_[1] ge $_[0]->{arg} } );
 __PACKAGE__->_subclass_op( gt => '>'  => sub { $_[1] gt $_[0]->{arg} } );
 
-package DBIx::Thorm::Comparator::Number;
+package Data::Criteria::Number;
 
 use Scalar::Util qw(looks_like_number);
-our @ISA = qw(DBIx::Thorm::Comparator);
+our @ISA = qw(Data::Criteria);
 
 sub match {
     my ($self, $arg) = @_;
@@ -182,9 +182,9 @@ __PACKAGE__->_subclass_op( le => '<=' => sub { looks_like_number $_[1] and $_[1]
 __PACKAGE__->_subclass_op( ge => '>=' => sub { looks_like_number $_[1] and $_[1] >= $_[0]->{arg} } );
 __PACKAGE__->_subclass_op( gt => '>'  => sub { looks_like_number $_[1] and $_[1] >  $_[0]->{arg} } );
 
-package DBIx::Thorm::Comparator::Whitelist;
+package Data::Criteria::Whitelist;
 
-our @ISA = qw(DBIx::Thorm::Comparator);
+our @ISA = qw(Data::Criteria);
 
 sub new {
     my $class = shift;
@@ -199,7 +199,7 @@ sub bit_and {
     my @white = keys %{ $self->{white} };
     @white = $_->filter(@white) for @other;
 
-    return DBIx::Thorm::Comparator::Whitelist->new( @white );
+    return Data::Criteria::Whitelist->new( @white );
 };
 
 sub match {
@@ -228,9 +228,9 @@ sub is_true {
     return '';
 };
 
-package DBIx::Thorm::Comparator::And;
+package Data::Criteria::And;
 
-our @ISA = qw(DBIx::Thorm::Comparator);
+our @ISA = qw(Data::Criteria);
 
 sub new {
     my $class = shift;
@@ -240,13 +240,13 @@ sub new {
     foreach (@_) {
         $_->is_nonempty or return $_;
         $_->is_true and next;
-        ref $_ eq 'DBIx::Thorm::Comparator::Whitelist'
+        ref $_ eq 'Data::Criteria::Whitelist'
             and return $_->bit_and(@_);
         push @args, $_;
     };
 
     # if 0-1 args, && op is trivial
-    return DBIx::Thorm::Comparator->new unless @args;
+    return Data::Criteria->new unless @args;
     return $args[0] if @args == 1;
 
     # ok, the hard part
@@ -280,9 +280,9 @@ sub is_true {
     return '';
 };
 
-package DBIx::Thorm::Comparator::Or;
+package Data::Criteria::Or;
 
-our @ISA = qw(DBIx::Thorm::Comparator);
+our @ISA = qw(Data::Criteria);
 
 sub new {
     my $class = shift;
@@ -296,7 +296,7 @@ sub new {
     };
 
     # if 0-1 args, && op is trivial
-    return DBIx::Thorm::Comparator::Whitelist->new unless @args;
+    return Data::Criteria::Whitelist->new unless @args;
     return $args[0] if @args == 1;
 
     # ok, the hard part

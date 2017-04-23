@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use Test::More;
 
-use DBIx::Thorm::Comparator;
+use Data::Criteria;
 
 $SIG{__DIE__} =\&Carp::confess;
 

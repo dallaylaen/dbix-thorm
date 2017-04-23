@@ -32,7 +32,7 @@ DBIx::Thorm - ORM that doesn't get in the way.
 use Carp;
 use Exporter qw(import);
 
-use DBIx::Thorm::Comparator;
+use Data::Criteria;
 our @EXPORT = qw(thorm string number);
 
 =head2 thorm operation => options ...

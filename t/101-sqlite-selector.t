@@ -5,7 +5,7 @@ use warnings;
 use Test::More;
 
 use DBIx::Thorm::Source::SQLite;
-use DBIx::Thorm::Comparator;
+use Data::Criteria;
 
 my $set = DBIx::Thorm::Source::SQLite->new(
     fields => [qw[name age debt income]],
