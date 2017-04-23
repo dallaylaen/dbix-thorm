@@ -23,7 +23,7 @@ use Carp;
 use Scalar::Util qw(blessed);
 
 use parent qw(DBIx::Thorm::Source);
-use DBIx::Thorm::Accumulator;
+use SQL::Decorate;
 
 my $testbase;
 sub new {
@@ -50,6 +50,12 @@ sub new {
     $opt{quest_update} = join ",", map { "$_=?" } @{ $opt{fields} };
     $opt{names_select} = join ",", $opt{key}, @{ $opt{fields} };
 
+    # prepare for SQL::Decorate
+    $opt{sql_lookup} = join " ",
+        SELECT => $opt{names_select},
+        FROM   => $opt{table} => "t",
+        WHERE  => "t=???";
+
     return $class->SUPER::new(%opt);
 };
 
@@ -66,7 +72,7 @@ sub save {
     my $id = $item->{$key};
 
     if ($id) {
-        # TODO only update needed fields - see Accumulator
+        # TODO only update needed fields - when SQL::Decorate can do it
         my $sth = $self->_prepare(
             UPDATE => $self->{table},
             SET    => $self->{quest_update},
@@ -120,7 +126,7 @@ sub load {
 sub lookup {
     my ($self, %opt) = @_;
 
-    my $accum = DBIx::Thorm::Accumulator->new;
+    my $dec = SQL::Decorate->new;
     my @order;
     foreach( ref $opt{order} ? @{$opt{order}} : $opt{order} ) {
         defined $_ or next;
@@ -132,15 +138,10 @@ sub lookup {
     };
 
     # TODO check that keys are within allowed
+    my ($sql, @arg) = $dec->decorate( $self->{sql_lookup}, $opt{criteria} );
 
-    my $sth = $self->_prepare(
-        SELECT => $self->{names_select},
-        FROM   => $self->{table},
-        WHERE  => $accum->where($opt{criteria}),
-        $order,
-    );
-
-    $sth->execute( $accum->list );
+    my $sth = $self->_prepare( $sql." ".$order );
+    $sth->execute( @arg );
     my @ret;
     while (my $row = $sth->fetchrow_hashref) {
         push @ret, $self->get_class->new( %$row );

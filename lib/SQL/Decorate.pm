@@ -70,7 +70,12 @@ sub where {
     my @sql;
     my @param;
     foreach (@fields) {
-        if (defined $hash->{$_}) {
+        if (ref $hash->{$_}) {
+            my ($sql, $arg) = $hash->{$_}->sql($_);
+            push @sql, $sql;
+            push @param, @$arg;
+        }
+        elsif (defined $hash->{$_}) {
             push @sql, "$prefix$_ = ?";
             push @param, $hash->{$_};
         }
