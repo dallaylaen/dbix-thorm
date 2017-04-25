@@ -2,7 +2,7 @@ package DBIx::Thorm::Source;
 
 use strict;
 use warnings;
-our $VERSION = 0.0102;
+our $VERSION = 0.0103;
 
 =head1 NAME
 
@@ -103,13 +103,13 @@ sub make_class {
     confess "No name!" unless $name;
     $opt{parent} ||= ['DBIx::Thorm::Record'];
     $opt{fields} ||= $self->{fields};
-    $opt{key}    ||= $self->{key};
+    my $key = $opt{key} || $self->{key};
 
     $self->_set_parent( $name, $opt{parent} );
     $self->_set_method( $name, save => sub { $self->save( shift ) });
 
     # get+set
-    foreach ($opt{key}, @{ $opt{fields} }) {
+    foreach ($key, @{ $opt{fields} }) {
         my $method = $_;
         $self->_set_method( $name, $method, sub {
             return $_[0]->{ $method } if @_ == 1;
@@ -117,6 +117,9 @@ sub make_class {
             return $_[0];
         } );
     };
+    # id for all
+    $self->_set_method( $name => id => sub { return $_[0]->{ $key } } )
+        unless $name->can("id");
 
     return $name;
 };

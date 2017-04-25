@@ -26,6 +26,7 @@ my $data = $source->lookup( criteria => { bar => number > 100 } );
 is scalar @$data, 1, "1 elt selected";
 
 is $data->[0]->foo, 102, "Data round trip";
+like $data->[0]->id, qr/^\d+$/, "Id selected";
 
 $data->[0]->baz( 42 );
 note explain $data;
