@@ -1,10 +1,11 @@
 VERSION APPEARED | MILESTONE | COMMENT
 0.01    0.10    CRI Add nullability to criteria
 0.01    0.10    REF Split criteria into packages, add always-true VS base
-0.01    0.10    REF Add commit hook, fixup everything
 0.01    0.10    SQL SELECT ALL:??? (what fields???)
 0.01    0.10    SQL ORDER:???
 0.01    0.10    SQL INSERT:???
 0.01    0.10    SQL UPDATE SET:???
 -- backlog --
-0.10    0.20    SQL table struct: know table names & fields, infer alias
+0.01    0.20    SQL table struct: know table names & fields, infer alias
+0.01    0.10    SQL $dec->prepare( STMT, %options )
+0.01    0.10    SQL support SQL::A-like where ('<=' => foo)

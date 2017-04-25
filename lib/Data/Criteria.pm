@@ -3,7 +3,7 @@ use warnings;
 
 package Data::Criteria;
 
-our $VERSION = 0.0103;
+our $VERSION = 0.0104;
 
 =head1 NAME
 
@@ -244,7 +244,7 @@ sub _subclass_op {
         };
     };
 
-    no strict 'refs';
+    no strict 'refs'; ## no critic # monkeypatch...
     @{"${pkg}::ISA"} = $basic;
     *{"${pkg}::new"} = $new;
     *{"${pkg}::match"} = $code;
@@ -267,10 +267,10 @@ Add corresponding operator to criteria.
 
 =cut
 
-__PACKAGE__->_subclass_op( lt => '<'  => sub { $_[1] lt $_[0]->{arg} } );
-__PACKAGE__->_subclass_op( le => '<=' => sub { $_[1] le $_[0]->{arg} } );
-__PACKAGE__->_subclass_op( ge => '>=' => sub { $_[1] ge $_[0]->{arg} } );
-__PACKAGE__->_subclass_op( gt => '>'  => sub { $_[1] gt $_[0]->{arg} } );
+__PACKAGE__->_subclass_op( lt => '<'  => sub { defined $_[1] and $_[1] lt $_[0]->{arg} } );
+__PACKAGE__->_subclass_op( le => '<=' => sub { defined $_[1] and $_[1] le $_[0]->{arg} } );
+__PACKAGE__->_subclass_op( ge => '>=' => sub { defined $_[1] and $_[1] ge $_[0]->{arg} } );
+__PACKAGE__->_subclass_op( gt => '>'  => sub { defined $_[1] and $_[1] gt $_[0]->{arg} } );
 
 package Data::Criteria::Number;
 
@@ -331,10 +331,15 @@ sub as_string {
 Add corresponding operator to criteria.
 
 =cut
-__PACKAGE__->_subclass_op( lt => '<'  => sub { looks_like_number $_[1] and $_[1] <  $_[0]->{arg} } );
-__PACKAGE__->_subclass_op( le => '<=' => sub { looks_like_number $_[1] and $_[1] <= $_[0]->{arg} } );
-__PACKAGE__->_subclass_op( ge => '>=' => sub { looks_like_number $_[1] and $_[1] >= $_[0]->{arg} } );
-__PACKAGE__->_subclass_op( gt => '>'  => sub { looks_like_number $_[1] and $_[1] >  $_[0]->{arg} } );
+
+{
+    no warnings 'uninitialized'; ## no critic
+    # undef doesn't look like number anyway, so it would yield false
+    __PACKAGE__->_subclass_op( lt => '<'  => sub { looks_like_number $_[1] and $_[1] <  $_[0]->{arg} } );
+    __PACKAGE__->_subclass_op( le => '<=' => sub { looks_like_number $_[1] and $_[1] <= $_[0]->{arg} } );
+    __PACKAGE__->_subclass_op( ge => '>=' => sub { looks_like_number $_[1] and $_[1] >= $_[0]->{arg} } );
+    __PACKAGE__->_subclass_op( gt => '>'  => sub { looks_like_number $_[1] and $_[1] >  $_[0]->{arg} } );
+}
 
 package Data::Criteria::Whitelist;
 
@@ -502,6 +507,8 @@ Data::Criteria::Or - set union.
 
 =cut
 
+use Scalar::Util qw(blessed);
+
 our @ISA = qw(Data::Criteria);
 
 =head2 new( @list_of_criteria )
@@ -516,6 +523,12 @@ sub new {
 
     # first, filter out args & short circuit, if possible
     foreach (@_) {
+        if (!ref $_) {
+            push @args, defined $_
+                ? Data::Criteria::Whitelist->new($_)
+                : Data::Criteria::Null->new;
+            next;
+        };
         $_->is_true and return $_;
         $_->is_nonempty or next;
         push @args, $_;
@@ -573,6 +586,31 @@ Always false.
 
 sub is_true {
     return '';
+};
+
+package Data::Criteria::Null;
+
+our @ISA = qw(Data::Criteria);
+
+my $Inst = bless {}, __PACKAGE__;
+sub new {
+    return $Inst;
+};
+
+sub is_true {
+    return '';
+};
+
+sub is_nonempty {
+    return 1;
+};
+
+sub match {
+    return !defined $_[1];
+};
+
+sub sql {
+    return "$_[1] IS NULL";
 };
 
 1;
