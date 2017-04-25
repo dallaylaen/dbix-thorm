@@ -41,14 +41,16 @@ Shorthand frontend to DBIx::Thorm->operation( ... );
 
 =cut
 
-our $Inst = bless {};
+our $Inst = bless {}; # TODO new
 sub thorm (@) {
     return $Inst unless @_;
     my $todo = shift;
     return $Inst->$todo(@_);
 };
 
-=head2 connect
+=head2 connect( %options )
+
+Connect to database.
 
 =cut
 
@@ -72,6 +74,12 @@ sub connect {
     return $self;
 };
 
+=head2 table( "name", %spec )
+
+Define a SQL-based data source.
+
+=cut
+
 sub table {
     my ($self, $name, %opt) = @_;
 
@@ -82,6 +90,12 @@ sub table {
     require DBIx::Thorm::Source::SQLite;
     return DBIx::Thorm::Source::SQLite->new( %opt, table => $name );
 };
+
+=head2 dbh( "name" )
+
+Return a database handler previously defined by connect().
+
+=cut
 
 sub dbh {
     my ($self, $name) = @_;

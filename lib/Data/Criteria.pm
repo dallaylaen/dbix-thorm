@@ -3,21 +3,59 @@ use warnings;
 
 package Data::Criteria;
 
-our $VERSION = 0.0102;
+our $VERSION = 0.0103;
+
+=head1 NAME
+
+Data::Criteria - generate string & number sets using overloaded comparisons
+
+=head1 SYNOPSIS
+
+    use Data::Criteria;
+
+    my $other_user = (number > 0) & (number != $uid);
+
+    0 =~ $other_user; # false
+    $uid =~ $other_user; # false
+    100500 =~ $other_user; # true unless == $uid
+
+    # generate 'user_id > 0 AND user_id <> ?
+    my ($sql, @param) = $other_user->sql("user_id");
+
+=cut
 
 use Carp;
 use Exporter qw(import);
 our @EXPORT = qw(string number);
 our @EXPORT_OK = qw(whitelist blacklist);
 
-# prototyped sugar
+=head1 PROTOTYPED SUGAR
+
+=head2 string()
+
+Returns an empty criterion object matching any string.
+
+=cut
+
 sub string () {
     return __PACKAGE__->new;
 };
 
+=head2 number()
+
+Returns a criterion object matching any number.
+
+=cut
+
 sub number () {
     return Data::Criteria::Number->new;
 };
+
+=head2 whitelist
+
+=head2 blacklist
+
+=cut
 
 sub blacklist {
     return Data::Criteria->new(@_);
@@ -26,6 +64,10 @@ sub blacklist {
 sub whitelist {
     return Data::Criteria::Whitelist->new(@_);
 };
+
+=head2 operators
+
+=cut
 
 use overload
     '""' => "as_string",
@@ -41,37 +83,11 @@ use overload
     '>=' => 'and_ge',
     ;
 
-# some basic funs
+=head1 METHODS
 
-sub bit_and {
-    return Data::Criteria::And->new( $_[0], $_[1] );
-};
+=head2 new
 
-sub bit_or {
-    return Data::Criteria::Or->new( $_[0], $_[1] );
-};
-
-sub between {
-    my ($self, $from, $to) = @_;
-    return $self->and_ge( $from )->and_le( $to );
-};
-
-sub in {
-    my $self = shift;
-   return Data::Criteria::Whitelist->new(@_)->bit_and($self);
-};
-
-sub filter {
-    my $self = shift;
-    return grep { $self->match($_) } @_;
-};
-
-sub as_string {
-    my $self = shift;
-    my ($expr, $data) = $self->sql('string');
-    return @$data ? "$expr [@$data]" : $expr;
-};
-
+=cut
 
 # implement blacklist as default
 sub new {
@@ -81,10 +97,86 @@ sub new {
     return bless { black => \%black }, $class;
 };
 
+=head2 bit_and( $other )
+
+Overloaded &.
+
+=cut
+
+sub bit_and {
+    return Data::Criteria::And->new( $_[0], $_[1] );
+};
+
+=head2 bit_or( $other )
+
+Overloaded |.
+
+=cut
+
+sub bit_or {
+    return Data::Criteria::Or->new( $_[0], $_[1] );
+};
+
+=head2 between( $min, $max )
+
+=cut
+
+sub between {
+    my ($self, $from, $to) = @_;
+    return $self->and_ge( $from )->and_le( $to );
+};
+
+=head2 in (@whitelist)
+
+Create whitelist. Arguments will be filtered using current criteria.
+
+=cut
+
+sub in {
+    my $self = shift;
+   return Data::Criteria::Whitelist->new(@_)->bit_and($self);
+};
+
+=head2 match( $value )
+
+Return true if value matches criteria.
+Overloaded =~.
+
+=cut
+
 sub match {
     my ($self, $x) = @_;
     return !$self->{black}{$x};
 };
+
+=head2 filter( @array )
+
+Return array of matching values.
+
+=cut
+
+sub filter {
+    my $self = shift;
+    return grep { $self->match($_) } @_;
+};
+
+=head2 as_string
+
+Currently returns SQL with sane default as field name.
+
+=cut
+
+sub as_string {
+    my $self = shift;
+    my ($expr, $data) = $self->sql('string');
+    return @$data ? "$expr [@$data]" : $expr;
+};
+
+=head2 sql( "field_name" )
+
+Returns SQL Statement suitable for WHERE.
+
+=cut
 
 sub sql {
     my ($self, $name) = @_;
@@ -94,9 +186,22 @@ sub sql {
     return ($sql, \@arg );
 };
 
+=head2 is_nonempty
+
+Returns true iff any value COULD match given criteria.
+
+=cut
+
 sub is_nonempty {
     return 1;
 };
+
+=head2 is_true
+
+Returns true iff ANY value matches given criteria.
+CAUTION: A true numeric criteria is still going to only match numbers.
+
+=cut
 
 sub is_true {
     my $self = shift;
@@ -150,6 +255,18 @@ sub _subclass_op {
     return $basic;
 };
 
+=head2 and_lt( $value )
+
+=head2 and_le( $value )
+
+=head2 and_ge( $value )
+
+=head2 and_gt( $value )
+
+Add corresponding operator to criteria.
+
+=cut
+
 __PACKAGE__->_subclass_op( lt => '<'  => sub { $_[1] lt $_[0]->{arg} } );
 __PACKAGE__->_subclass_op( le => '<=' => sub { $_[1] le $_[0]->{arg} } );
 __PACKAGE__->_subclass_op( ge => '>=' => sub { $_[1] ge $_[0]->{arg} } );
@@ -157,18 +274,44 @@ __PACKAGE__->_subclass_op( gt => '>'  => sub { $_[1] gt $_[0]->{arg} } );
 
 package Data::Criteria::Number;
 
+=head1 NAME
+
+Data::Criteria::Number - numeric criteria
+
+=head1 METHODS
+
+=cut
+
 use Scalar::Util qw(looks_like_number);
 our @ISA = qw(Data::Criteria);
+
+=head2 new
+
+Create new numeric criteria.
+
+=cut
+
+sub new {
+    my $self = shift;
+    return $self->SUPER::new( grep { defined $_ and looks_like_number $_ } @_ );
+};
+
+=head2 match
+
+Matches any number that satisfies given criteria.
+
+=cut
 
 sub match {
     my ($self, $arg) = @_;
     return looks_like_number($arg) && !$self->{black}{$arg};
 };
 
-sub new {
-    my $self = shift;
-    return $self->SUPER::new( grep { defined $_ and looks_like_number $_ } @_ );
-};
+=head2 as_string
+
+Overloaded stringify, currently uses SQL.
+
+=cut
 
 sub as_string {
     my $self = shift;
@@ -177,6 +320,17 @@ sub as_string {
     return @$data ? "$expr [@$data]" : $expr;
 };
 
+=head2 and_lt( $value )
+
+=head2 and_le( $value )
+
+=head2 and_ge( $value )
+
+=head2 and_gt( $value )
+
+Add corresponding operator to criteria.
+
+=cut
 __PACKAGE__->_subclass_op( lt => '<'  => sub { looks_like_number $_[1] and $_[1] <  $_[0]->{arg} } );
 __PACKAGE__->_subclass_op( le => '<=' => sub { looks_like_number $_[1] and $_[1] <= $_[0]->{arg} } );
 __PACKAGE__->_subclass_op( ge => '>=' => sub { looks_like_number $_[1] and $_[1] >= $_[0]->{arg} } );
@@ -184,7 +338,17 @@ __PACKAGE__->_subclass_op( gt => '>'  => sub { looks_like_number $_[1] and $_[1]
 
 package Data::Criteria::Whitelist;
 
+=head1 NAME
+
+Data::Criteria::Whitelist - a fixed list of data to be matched against.
+
+=cut
+
 our @ISA = qw(Data::Criteria);
+
+=head2 new( @list )
+
+=cut
 
 sub new {
     my $class = shift;
@@ -192,6 +356,12 @@ sub new {
     $white{$_}++ for @_;
     return bless { white => \%white}, $class;
 };
+
+=head2 bit_and( $other )
+
+For speed, filter data through $other and return a new whitelist.
+
+=cut
 
 sub bit_and {
     my ($self, @other) = @_;
@@ -202,10 +372,18 @@ sub bit_and {
     return Data::Criteria::Whitelist->new( @white );
 };
 
+=head2 match ($value)
+
+=cut
+
 sub match {
     my ($self, $x) = @_;
     return $self->{white}{$x} || '';
 };
+
+=head2 sql( "field_name" )
+
+=cut
 
 sub sql {
     my ($self, $name) = @_;
@@ -219,10 +397,20 @@ sub sql {
     return ($str, [keys %{ $self->{white} }]);
 };
 
+=head2 is_nonempty
+
+=cut
+
 sub is_nonempty {
     my $self = shift;
     return !! %{ $self->{white} };
 };
+
+=head2 is_true
+
+Always false.
+
+=cut
 
 sub is_true {
     return '';
@@ -230,7 +418,19 @@ sub is_true {
 
 package Data::Criteria::And;
 
+=head1 NAME
+
+Data::Criteria::And - set intersection.
+
+=cut
+
 our @ISA = qw(Data::Criteria);
+
+=head2 new( @list_of_criteria )
+
+MAY return other types depending on arguments (empty list etc.)
+
+=cut
 
 sub new {
     my $class = shift;
@@ -253,12 +453,20 @@ sub new {
     return bless { part => \@args }, $class;
 };
 
+=head2 match( $value )
+
+=cut
+
 sub match {
     my ($self, $x) = @_;
 
     $_->match($x) or return '' for @{ $self->{part} };
     return 1;
 };
+
+=head2 sql( "field_name" )
+
+=cut
 
 sub sql {
     my ($self, $name) = @_;
@@ -276,13 +484,31 @@ sub sql {
     return ((join ' AND ', @sql), \@data);
 };
 
+=head2 is_true
+
+Always false.
+
+=cut
+
 sub is_true {
     return '';
 };
 
 package Data::Criteria::Or;
 
+=head1 NAME
+
+Data::Criteria::Or - set union.
+
+=cut
+
 our @ISA = qw(Data::Criteria);
+
+=head2 new( @list_of_criteria )
+
+MAY return other types depending on arguments (empty list etc.)
+
+=cut
 
 sub new {
     my $class = shift;
@@ -303,12 +529,20 @@ sub new {
     return bless { part => \@args }, $class;
 };
 
+=head2 match( $value )
+
+=cut
+
 sub match {
     my ($self, $x) = @_;
 
     $_->match($x) and return 1 for @{ $self->{part} };
     return '';
 };
+
+=head2 sql( "field_name" )
+
+=cut
 
 sub sql {
     my ($self, $name) = @_;
@@ -329,6 +563,13 @@ sub sql {
 
     return ($str, \@data);
 };
+
+
+=head2 is_true
+
+Always false.
+
+=cut
 
 sub is_true {
     return '';
