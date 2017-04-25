@@ -2,7 +2,7 @@ package DBIx::Thorm::Source;
 
 use strict;
 use warnings;
-our $VERSION = 0.0101;
+our $VERSION = 0.0102;
 
 =head1 NAME
 
@@ -30,6 +30,24 @@ use Carp;
 
 use DBIx::Thorm::Record;
 
+=head2 new( %options )
+
+%options may include:
+
+=over
+
+=item * key (required) - the identifier field in record;
+
+=item * class_prefix - prefix for generated class name
+(default = DBIx::Thorm::Record);
+
+=item * class - override class name altogether
+(default = <prefix>::generated::$uniq_integer_id;
+
+=back
+
+=cut
+
 sub new {
     my ($class, %opt) = @_;
     $opt{class_prefix} ||= 'DBIx::Thorm::Record';
@@ -38,22 +56,45 @@ sub new {
     return bless \%opt, $class;
 };
 
+=head2 get_class
+
+Returns class of contained objects.
+Class generation happens here if needed.
+
+=cut
+
 sub get_class {
     my $self = shift;
     return $self->{class} ||= $self->make_class;
 };
+
+=head2 get_key
+
+Return the key field.
+
+=cut
 
 sub get_key {
     my $self = shift;
     return $self->{key};
 };
 
+=head2 spawn( %options )
+
+Create a new record with desired fields. Not saved anywhere by default.
+
+=cut
+
 sub spawn {
     my $self = shift;
     $self->get_class->new(@_);
 };
 
+=head2 make_class( %options )
 
+Generate methods for record class. Dragons be here, use with caution.
+
+=cut
 
 sub make_class {
     my ($self, %opt) = @_;
@@ -66,8 +107,8 @@ sub make_class {
 
     $self->_set_parent( $name, $opt{parent} );
     $self->_set_method( $name, save => sub { $self->save( shift ) });
-   
-    # get+set 
+
+    # get+set
     foreach ($opt{key}, @{ $opt{fields} }) {
         my $method = $_;
         $self->_set_method( $name, $method, sub {
@@ -80,6 +121,12 @@ sub make_class {
     return $name;
 };
 
+=head2 create_class_id
+
+Autogenerate unique class name.
+
+=cut
+
 my $id;
 sub create_class_id {
     my $self = shift;
@@ -91,7 +138,7 @@ sub _set_parent {
     my ($self, $target, $parent) = @_;
 
     $parent = [$parent] unless ref $parent eq 'ARRAY';
-    no strict 'refs';
+    no strict 'refs'; ## no critic
     push @{ join "::", $target, 'ISA' }, @$parent;
 };
 
@@ -101,7 +148,7 @@ sub _set_method {
     croak ("Attempt to set duplicate method ${target}->${name}")
         if $target->can($name);
 
-    no strict 'refs';
+    no strict 'refs'; ## no critic
     *{ join "::", $target, $name } = $code;
 };
 

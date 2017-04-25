@@ -2,7 +2,7 @@ package DBIx::Thorm::Source::SQLite;
 
 use strict;
 use warnings;
-our $VERSION = 0.0105;
+our $VERSION = 0.0106;
 
 =head1 NAME
 
@@ -17,6 +17,8 @@ DBIx::Thorm::Source::SQLite - SQL-based storage for Thorm.
         fields => [qw[ foo bar baz ]],
     );
 
+=head1 methods
+
 =cut
 
 use Carp;
@@ -24,6 +26,12 @@ use Scalar::Util qw(blessed);
 
 use parent qw(DBIx::Thorm::Source);
 use SQL::Decorate;
+
+=head2 new( %options )
+
+%options MUST include: dbh, table, key, fields=[]
+
+=cut
 
 my $testbase;
 sub new {
@@ -59,10 +67,25 @@ sub new {
     return $class->SUPER::new(%opt);
 };
 
+=head2 dbh
+
+Get database handle.
+
+=cut
+
 sub dbh {
     my $self = shift;
     return $self->{dbh};
 };
+
+=head2 save( $record || \%hash )
+
+Save an object. If key is present, try updating first; otherwise insert.
+A plain hash may be supplied as well.
+
+Returned is always an object of contained class, key is guaranteed on return.
+
+=cut
 
 # upsert
 sub save {
@@ -105,6 +128,12 @@ sub save {
     };
 };
 
+=head2 load( $id )
+
+Load a record by key value, if present.
+
+=cut
+
 sub load {
     my ($self, $id) = @_;
 
@@ -122,6 +151,22 @@ sub load {
     $sth->finish;
     return $self->get_class->new( %$raw );
 };
+
+=head2 lookup( %options )
+
+%options may include:
+
+=over
+
+=item * criteria - a \%hash of values, undefs, or Data::Criteria objects
+
+=item * order - a \@list of "field" or "-field" (for DESC).
+
+=item * limit - a \@list for limit (this MAY change in the foture)
+
+=back
+
+=cut
 
 sub lookup {
     my ($self, %opt) = @_;
